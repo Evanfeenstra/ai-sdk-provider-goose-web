@@ -1,4 +1,4 @@
-import { APICallError } from '@ai-sdk/provider';
+import { APICallError } from "@ai-sdk/provider";
 
 /**
  * Metadata associated with Goose Web errors.
@@ -7,7 +7,7 @@ export interface GooseWebErrorMetadata {
   wsUrl?: string;
   sessionId?: string;
   lastMessage?: string;
-  connectionState?: 'connecting' | 'connected' | 'disconnected' | 'error';
+  connectionState?: "connecting" | "connected" | "disconnected" | "error";
 }
 
 /**
@@ -15,12 +15,14 @@ export interface GooseWebErrorMetadata {
  */
 export function createAPICallError(
   message: string,
-  metadata?: GooseWebErrorMetadata,
+  metadata?: GooseWebErrorMetadata
 ): APICallError {
   return new APICallError({
     message,
-    url: metadata?.wsUrl || 'ws://unknown',
-    requestBodyValues: metadata?.lastMessage ? { message: metadata.lastMessage } : undefined,
+    url: metadata?.wsUrl || "ws://unknown",
+    requestBodyValues: metadata?.lastMessage
+      ? { message: metadata.lastMessage }
+      : undefined,
     data: metadata,
     isRetryable: false,
   });
@@ -31,12 +33,14 @@ export function createAPICallError(
  */
 export function createConnectionError(
   message: string,
-  metadata?: GooseWebErrorMetadata,
+  metadata?: GooseWebErrorMetadata
 ): APICallError {
   return new APICallError({
     message: `Connection error: ${message}`,
-    url: metadata?.wsUrl || 'ws://unknown',
-    requestBodyValues: metadata?.lastMessage ? { message: metadata.lastMessage } : undefined,
+    url: metadata?.wsUrl || "ws://unknown",
+    requestBodyValues: metadata?.lastMessage
+      ? { message: metadata.lastMessage }
+      : undefined,
     data: metadata,
     isRetryable: true,
   });
@@ -47,12 +51,14 @@ export function createConnectionError(
  */
 export function createTimeoutError(
   timeoutMs: number,
-  metadata?: GooseWebErrorMetadata,
+  metadata?: GooseWebErrorMetadata
 ): APICallError {
   return new APICallError({
     message: `Request timed out after ${timeoutMs}ms`,
-    url: metadata?.wsUrl || 'ws://unknown',
-    requestBodyValues: metadata?.lastMessage ? { message: metadata.lastMessage } : undefined,
+    url: metadata?.wsUrl || "ws://unknown",
+    requestBodyValues: metadata?.lastMessage
+      ? { message: metadata.lastMessage }
+      : undefined,
     data: metadata,
     isRetryable: true,
   });
@@ -62,16 +68,16 @@ export function createTimeoutError(
  * Checks if an error is a connection error.
  */
 export function isConnectionError(error: unknown): boolean {
-  return error instanceof APICallError && 
-         error.message.includes('Connection error');
+  return (
+    error instanceof APICallError && error.message.includes("Connection error")
+  );
 }
 
 /**
  * Checks if an error is a timeout error.
  */
 export function isTimeoutError(error: unknown): boolean {
-  return error instanceof APICallError && 
-         error.message.includes('timed out');
+  return error instanceof APICallError && error.message.includes("timed out");
 }
 
 /**

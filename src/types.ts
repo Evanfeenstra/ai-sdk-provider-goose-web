@@ -7,25 +7,25 @@ export interface GooseWebSettings {
    * @default 'ws://localhost:8080/ws'
    */
   wsUrl?: string;
-  
+
   /**
    * Session ID to use for the Goose session.
    * If not provided, a new session will be created.
    */
   sessionId?: string;
-  
+
   /**
    * Connection timeout in milliseconds.
    * @default 30000
    */
   connectionTimeout?: number;
-  
+
   /**
    * Response timeout in milliseconds.
    * @default 120000
    */
   responseTimeout?: number;
-  
+
   /**
    * Logger instance for debugging and monitoring.
    */
@@ -46,7 +46,7 @@ export interface Logger {
  * WebSocket message types sent to the Goose server.
  */
 export interface GooseWebMessage {
-  type: 'message' | 'cancel';
+  type: "message" | "cancel";
   content?: string;
   session_id: string;
   timestamp?: number;
@@ -56,10 +56,17 @@ export interface GooseWebMessage {
  * WebSocket message types received from the Goose server.
  */
 export interface GooseWebResponse {
-  type: 'response' | 'tool_request' | 'tool_response' | 'thinking' | 'complete' | 'error' | 'cancelled';
+  type:
+    | "response"
+    | "tool_request"
+    | "tool_response"
+    | "thinking"
+    | "complete"
+    | "error"
+    | "cancelled";
   id?: string;
   content?: string;
-  role?: 'assistant' | 'user';
+  role?: "assistant" | "user";
   timestamp?: number;
   message?: string;
   tool_name?: string;
