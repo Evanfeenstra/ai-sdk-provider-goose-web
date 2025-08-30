@@ -304,8 +304,7 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
   private async* streamResponse(ws: WebSocket, message: string): AsyncGenerator<LanguageModelV2StreamPart> {
     let responseText = '';
     let finished = false;
-    let textPartId: string | null = null;
-    let hasStartedText = false;
+    let currentStreamingMessage: { textPartId: string; content: string } | null = null;
     
     const messageQueue: LanguageModelV2StreamPart[] = [];
     let resolveNext: ((value: IteratorResult<LanguageModelV2StreamPart>) => void) | null = null;
@@ -336,21 +335,32 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
             if (data.content) {
               responseText += data.content;
               
-              // Start text part if this is the first content
-              if (!hasStartedText) {
-                textPartId = generateId();
-                hasStartedText = true;
+              // If this is the first chunk of a new message, or we don't have a current streaming message
+              if (!currentStreamingMessage) {
+                const textPartId = generateId();
+                currentStreamingMessage = {
+                  textPartId,
+                  content: data.content,
+                };
+                
+                // Start new text part
                 enqueueStreamPart({
                   type: 'text-start',
                   id: textPartId,
                 });
-              }
-              
-              // Emit text delta
-              if (textPartId) {
+                
                 enqueueStreamPart({
                   type: 'text-delta',
                   id: textPartId,
+                  delta: data.content,
+                });
+              } else {
+                // Append to existing streaming message
+                currentStreamingMessage.content += data.content;
+                
+                enqueueStreamPart({
+                  type: 'text-delta',
+                  id: currentStreamingMessage.textPartId,
                   delta: data.content,
                 });
               }
@@ -358,14 +368,14 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
             break;
           
           case 'tool_request':
-            // End current text part if we were in the middle of one
-            if (hasStartedText && textPartId) {
+            // End current streaming message if we were in the middle of one (matches Goose web client)
+            if (currentStreamingMessage) {
               enqueueStreamPart({
                 type: 'text-end',
-                id: textPartId,
+                id: currentStreamingMessage.textPartId,
               });
-              hasStartedText = false;
-              textPartId = null;
+              // Reset streaming message so tool doesn't interfere with message flow
+              currentStreamingMessage = null;
             }
             
             // Emit tool call
@@ -378,6 +388,9 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
             break;
           
           case 'tool_response':
+            // Reset streaming message so next assistant response creates a new message (matches Goose web client)
+            currentStreamingMessage = null;
+            
             // Emit tool result if we have a matching tool call
             if (data.result) {
               const toolResult = Array.isArray(data.result) 
@@ -397,12 +410,13 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
             clearTimeout(timeout);
             finished = true;
             
-            // End text part if we were in the middle of one
-            if (hasStartedText && textPartId) {
+            // Finalize any streaming message (matches Goose web client)
+            if (currentStreamingMessage) {
               enqueueStreamPart({
                 type: 'text-end',
-                id: textPartId,
+                id: currentStreamingMessage.textPartId,
               });
+              currentStreamingMessage = null;
             }
             
             // Emit finish
@@ -421,12 +435,13 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
             clearTimeout(timeout);
             finished = true;
             
-            // End text part if we were in the middle of one
-            if (hasStartedText && textPartId) {
+            // End any streaming message if we were in the middle of one
+            if (currentStreamingMessage) {
               enqueueStreamPart({
                 type: 'text-end',
-                id: textPartId,
+                id: currentStreamingMessage.textPartId,
               });
+              currentStreamingMessage = null;
             }
             
             enqueueStreamPart({
