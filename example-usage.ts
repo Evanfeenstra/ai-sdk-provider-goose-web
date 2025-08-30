@@ -185,13 +185,15 @@ async function customSettingsExample() {
 async function main() {
   console.log("Goose Web AI SDK Provider Examples\n");
 
+  await streamingWithToolsExample();
+  console.log("\n" + "=".repeat(50) + "\n");
+
+  return;
+
   await basicExample();
   console.log("\n" + "=".repeat(50) + "\n");
 
   await streamingExample();
-  console.log("\n" + "=".repeat(50) + "\n");
-
-  await streamingWithToolsExample();
   console.log("\n" + "=".repeat(50) + "\n");
 
   await objectGenerationExample();
