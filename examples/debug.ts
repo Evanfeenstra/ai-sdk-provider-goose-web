@@ -1,7 +1,7 @@
-import { gooseWeb } from "./src/index.js";
+import { gooseWeb } from "../src/index.js";
 import { streamText } from "ai";
 
-async function debugStreamingExample() {
+export async function debugStreamingExample() {
   console.log("=== Debug Streaming Example ===");
 
   const model = gooseWeb("goose", {
@@ -43,4 +43,6 @@ async function debugStreamingExample() {
   }
 }
 
-debugStreamingExample().catch(console.error);
+if (import.meta.url === `file://${process.argv[1]}`) {
+  debugStreamingExample().catch(console.error);
+}
