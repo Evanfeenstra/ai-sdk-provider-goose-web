@@ -46,7 +46,9 @@
     "prepublishOnly": "npm run clean && npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "example": "npm run build && npx tsx example-usage.ts",
+    "example:dev": "npx tsx example-usage.ts"
   },
   "dependencies": {
     "@ai-sdk/provider": "2.0.0",
@@ -61,8 +63,13 @@
     "ai": "5.0.14",
     "eslint": "9.28.0",
     "tsup": "8.5.0",
+    "tsx": "^4.19.2",
     "typescript": "5.6.3",
-    "vitest": "3.2.4"
+    "vitest": "3.2.4",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
   },
   "engines": {
     "node": ">=18"

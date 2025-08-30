@@ -191,30 +191,56 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     };
   }
 
-  private convertPromptToText(prompt: any): string {
+  private convertPromptToText(prompt: Parameters<LanguageModelV2['doGenerate']>[0]['prompt']): string {
+    // Handle array of messages (most common case)
+    if (Array.isArray(prompt)) {
+      const messages: string[] = [];
+      
+      for (const message of prompt) {
+        if (!message || typeof message !== 'object') continue;
+        
+        switch (message.role) {
+          case 'system':
+            // Add system message as context
+            if (typeof message.content === 'string') {
+              messages.unshift(`System: ${message.content}`);
+            }
+            break;
+            
+          case 'user':
+          case 'assistant':
+            if (typeof message.content === 'string') {
+              messages.push(message.content);
+            } else if (Array.isArray(message.content)) {
+              // Handle multi-part content
+              const textParts = message.content
+                .filter(part => part && part.type === 'text')
+                .map(part => {
+                  // Type guard to ensure we have a text part
+                  if (part.type === 'text' && 'text' in part) {
+                    return part.text;
+                  }
+                  return '';
+                })
+                .filter(Boolean);
+              if (textParts.length > 0) {
+                messages.push(textParts.join(' '));
+              }
+            }
+            break;
+        }
+      }
+      
+      return messages.join('\n\n');
+    }
+    
+    // Handle string prompt
     if (typeof prompt === 'string') {
       return prompt;
     }
     
-    if (Array.isArray(prompt)) {
-      return prompt
-        .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-        .map(msg => {
-          if (typeof msg.content === 'string') {
-            return msg.content;
-          }
-          if (Array.isArray(msg.content)) {
-            return msg.content
-              .filter((part: any) => part.type === 'text')
-              .map((part: any) => part.text)
-              .join(' ');
-          }
-          return '';
-        })
-        .join('\n\n');
-    }
-    
-    return String(prompt);
+    // Fallback for unknown format
+    return String(prompt || '');
   }
 
   private async generateResponse(ws: WebSocket, message: string, streaming: boolean) {
