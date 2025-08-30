@@ -49,7 +49,7 @@ describe('GooseWebProvider', () => {
       const model = provider('goose', {
         sessionId: 'model-session',
         responseTimeout: 60000,
-      });
+      }) as GooseWebLanguageModel;
       
       // Settings should be merged (provider + model specific)
       expect(model.settings.wsUrl).toBe('ws://provider:8000/ws');
@@ -67,7 +67,7 @@ describe('GooseWebProvider', () => {
       const model = provider('goose', {
         wsUrl: 'ws://model:9000/ws',
         sessionId: 'model-session',
-      });
+      }) as GooseWebLanguageModel;
       
       // Model settings should override provider settings
       expect(model.settings.wsUrl).toBe('ws://model:9000/ws');
@@ -137,7 +137,7 @@ describe('GooseWebProvider', () => {
     });
 
     it('should create models with default provider', () => {
-      const model = gooseWeb('goose');
+      const model = gooseWeb('goose') as GooseWebLanguageModel;
       expect(model).toBeInstanceOf(GooseWebLanguageModel);
       expect(model.modelId).toBe('goose');
       expect(model.settings.wsUrl).toBe('ws://localhost:8080/ws');

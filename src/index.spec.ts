@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as GooseWebProvider from './index.js';
+import { GooseWebLanguageModel } from './goose-web-language-model.js';
 
 describe('GooseWebProvider Index', () => {
   it('should export all required functions and types', () => {
@@ -29,7 +30,7 @@ describe('GooseWebProvider Index', () => {
       sessionId: 'test-session',
     });
     
-    const model = provider('goose');
+    const model = provider('goose') as GooseWebLanguageModel;
     expect(model.modelId).toBe('goose');
     expect(model.settings.wsUrl).toBe('ws://test:8080/ws');
     expect(model.settings.sessionId).toBe('test-session');
