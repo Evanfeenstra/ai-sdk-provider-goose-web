@@ -120,8 +120,9 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
       const result = await this.generateResponse(ws, userMessage, false);
       
       // Extract JSON if responseFormat indicates JSON mode
-      if (responseFormat?.type === 'json' && result.text) {
-        result.text = this.extractJson(result.text);
+      if (responseFormat?.type === 'json' && result.content?.[0]?.type === 'text') {
+        const extractedJson = this.extractJson(result.content[0].text);
+        result.content[0].text = extractedJson;
       }
       
       return result;
@@ -275,11 +276,23 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
             case 'complete':
               clearTimeout(timeout);
               resolve({
-                text: responseText,
+                content: [{ type: 'text', text: responseText }],
                 finishReason: 'stop' as LanguageModelV2FinishReason,
                 usage,
                 warnings: [],
-                rawCall: { rawPrompt: message, rawSettings: this.settings },
+                response: {
+                  id: generateId(),
+                  timestamp: new Date(),
+                  modelId: this.modelId,
+                },
+                request: {
+                  body: message,
+                },
+                providerMetadata: {
+                  'goose-web': {
+                    sessionId: this.sessionId,
+                  },
+                },
               });
               break;
             
