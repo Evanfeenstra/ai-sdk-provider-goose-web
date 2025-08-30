@@ -34,7 +34,7 @@ async function streamingExample() {
   try {
     const result = streamText({
       model,
-      prompt: "Explain how WebSockets work in simple terms.",
+      prompt: "Hello! Please tell me about WebSockets in only 1 sentence.",
     });
 
     console.log("Streaming response:");
@@ -191,12 +191,13 @@ async function customSettingsExample() {
 async function main() {
   console.log("Goose Web AI SDK Provider Examples\n");
 
-  await basicExample();
-  console.log("\n" + "=".repeat(50) + "\n");
-  return;
+  // await basicExample();
+  // console.log("\n" + "=".repeat(50) + "\n");
+
   await streamingExample();
   console.log("\n" + "=".repeat(50) + "\n");
 
+  return;
   await streamingWithToolsExample();
   console.log("\n" + "=".repeat(50) + "\n");
 

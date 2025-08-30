@@ -48,7 +48,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "example": "npm run build && npx tsx example-usage.ts",
-    "example:dev": "npx tsx example-usage.ts"
+    "example:dev": "npx tsx example-usage.ts",
+    "debug": "npm run build && npx tsx debug-streaming.ts"
   },
   "dependencies": {
     "@ai-sdk/provider": "2.0.0",

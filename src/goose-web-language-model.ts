@@ -147,42 +147,10 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     
     const ws = await this.createWebSocket();
     
-    const stream = new ReadableStream<LanguageModelV2StreamPart>({
-      start: async (controller) => {
-        try {
-          let accumulatedText = '';
-          
-          for await (const part of this.streamResponse(ws, userMessage)) {
-            // Accumulate text for JSON extraction
-            if (part.type === 'text-delta') {
-              accumulatedText += part.delta;
-            }
-            
-            // Handle JSON extraction on finish for JSON mode
-            if (part.type === 'finish' && responseFormat?.type === 'json' && accumulatedText) {
-              const extractedJson = this.extractJson(accumulatedText);
-              if (extractedJson !== accumulatedText) {
-                // Emit a new text sequence with just the JSON
-                const jsonId = generateId();
-                controller.enqueue({ type: 'text-start', id: jsonId });
-                controller.enqueue({ type: 'text-delta', id: jsonId, delta: extractedJson });
-                controller.enqueue({ type: 'text-end', id: jsonId });
-              }
-            }
-            
-            // Skip text parts in JSON mode since we'll emit clean JSON
-            if (responseFormat?.type === 'json' && (part.type === 'text-start' || part.type === 'text-delta' || part.type === 'text-end')) {
-              continue;
-            }
-            
-            controller.enqueue(part);
-          }
-          controller.close();
-        } catch (error) {
-          controller.error(error);
-        }
-      },
-    });
+    const stream = this.createStreamFromAsyncGenerator(
+      this.streamResponse(ws, userMessage),
+      responseFormat
+    );
 
     return {
       stream,
@@ -344,9 +312,11 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     let responseText = '';
     let finished = false;
     let currentStreamingMessage: { textPartId: string; content: string } | null = null;
+    let textStartEmitted = false;
     
     const messageQueue: LanguageModelV2StreamPart[] = [];
     let resolveNext: ((value: IteratorResult<LanguageModelV2StreamPart>) => void) | null = null;
+    let pendingTextStart: LanguageModelV2StreamPart | null = null;
     
     const timeout = setTimeout(() => {
       ws.close();
@@ -356,11 +326,40 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     }, this.settings.responseTimeout);
 
     const enqueueStreamPart = (part: LanguageModelV2StreamPart) => {
-      if (resolveNext) {
-        resolveNext({ done: false, value: part });
-        resolveNext = null;
-      } else {
+      this.logger?.debug('Enqueueing stream part:', part);
+      
+      // Special handling for text-start: store it but don't yield immediately
+      if (part.type === 'text-start') {
+        pendingTextStart = part;
+        return;
+      }
+      
+      // For text-delta: yield text-start first if we have one
+      if (part.type === 'text-delta' && pendingTextStart) {
+        // Always queue text-start first, then text-delta
+        messageQueue.push(pendingTextStart);
         messageQueue.push(part);
+        pendingTextStart = null;
+        
+        // Wake up the generator if it's waiting
+        if (resolveNext) {
+          const resolve = resolveNext;
+          resolveNext = null;
+          resolve({ done: false, value: null as any });
+        }
+        return;
+      }
+      
+      // Default enqueueing: always add to queue and wake up generator
+      messageQueue.push(part);
+      
+      if (resolveNext) {
+        this.logger?.debug(`Waking up generator for queued part: ${part.type}`);
+        const resolve = resolveNext;
+        resolveNext = null;
+        resolve({ done: false, value: null as any });
+      } else {
+        this.logger?.debug(`No resolveNext, part queued: ${part.type}`);
       }
     };
 
@@ -374,13 +373,14 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
             if (data.content) {
               responseText += data.content;
               
-              // If this is the first chunk of a new message, or we don't have a current streaming message
-              if (!currentStreamingMessage) {
+              // If this is the first chunk of any content, emit text-start once
+              if (!textStartEmitted) {
                 const textPartId = generateId();
                 currentStreamingMessage = {
                   textPartId,
                   content: data.content,
                 };
+                textStartEmitted = true;
                 
                 // Start new text part
                 enqueueStreamPart({
@@ -393,8 +393,8 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
                   id: textPartId,
                   delta: data.content,
                 });
-              } else {
-                // Append to existing streaming message
+              } else if (currentStreamingMessage) {
+                // Continue existing streaming message
                 currentStreamingMessage.content += data.content;
                 
                 enqueueStreamPart({
@@ -529,9 +529,13 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     
     // Generator loop
     while (!finished || messageQueue.length > 0) {
+      this.logger?.debug(`Generator loop: finished=${finished}, queue length=${messageQueue.length}`);
       if (messageQueue.length > 0) {
-        yield messageQueue.shift()!;
+        const part = messageQueue.shift()!;
+        this.logger?.debug(`Yielding part: ${part.type}`);
+        yield part;
       } else {
+        this.logger?.debug('Waiting for next message...');
         await new Promise<void>((resolve) => {
           resolveNext = (result) => {
             if (!result.done) {
@@ -539,10 +543,55 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
             }
           };
         });
+        this.logger?.debug('Generator woken up, checking queue...');
       }
     }
     
     ws.close();
+  }
+
+  private createStreamFromAsyncGenerator(
+    generator: AsyncGenerator<LanguageModelV2StreamPart>,
+    responseFormat?: { type: 'json'; schema?: unknown } | { type: 'text' }
+  ): ReadableStream<LanguageModelV2StreamPart> {
+    const self = this;
+    return new ReadableStream<LanguageModelV2StreamPart>({
+      async start(controller) {
+        try {
+          let accumulatedText = '';
+          
+          for await (const part of generator) {
+            // Accumulate text for JSON extraction
+            if (part.type === 'text-delta') {
+              accumulatedText += part.delta;
+            }
+            
+            // Handle JSON extraction on finish for JSON mode
+            if (part.type === 'finish' && responseFormat?.type === 'json' && accumulatedText) {
+              const extractedJson = self.extractJson(accumulatedText);
+              if (extractedJson !== accumulatedText) {
+                // Emit a new text sequence with just the JSON
+                const jsonId = generateId();
+                controller.enqueue({ type: 'text-start', id: jsonId });
+                controller.enqueue({ type: 'text-delta', id: jsonId, delta: extractedJson });
+                controller.enqueue({ type: 'text-end', id: jsonId });
+              }
+            }
+            
+            // Skip text parts in JSON mode since we'll emit clean JSON
+            if (responseFormat?.type === 'json' && (part.type === 'text-start' || part.type === 'text-delta' || part.type === 'text-end')) {
+              continue;
+            }
+            
+            controller.enqueue(part);
+          }
+          
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        }
+      }
+    });
   }
 
   /**
