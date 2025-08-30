@@ -57,6 +57,7 @@ export interface GooseWebMessage {
  */
 export interface GooseWebResponse {
   type: 'response' | 'tool_request' | 'tool_response' | 'thinking' | 'complete' | 'error' | 'cancelled';
+  id?: string;
   content?: string;
   role?: 'assistant' | 'user';
   timestamp?: number;

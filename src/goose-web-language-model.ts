@@ -101,32 +101,79 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
   }
 
   async doGenerate(options: Parameters<LanguageModelV2['doGenerate']>[0]) {
-    const { prompt, ...rest } = options;
+    const { prompt, responseFormat, ...rest } = options;
     
     // Convert messages to a single text prompt for Goose
-    const userMessage = this.convertPromptToText(prompt);
+    let userMessage = this.convertPromptToText(prompt);
+    
+    // Add JSON format instruction if needed
+    if (responseFormat?.type === 'json') {
+      userMessage += '\n\nPlease respond with valid JSON only.';
+      if (responseFormat.schema) {
+        userMessage += ` Follow this JSON schema: ${JSON.stringify(responseFormat.schema)}`;
+      }
+    }
     
     const ws = await this.createWebSocket();
     
     try {
-      return await this.generateResponse(ws, userMessage, false);
+      const result = await this.generateResponse(ws, userMessage, false);
+      
+      // Extract JSON if responseFormat indicates JSON mode
+      if (responseFormat?.type === 'json' && result.text) {
+        result.text = this.extractJson(result.text);
+      }
+      
+      return result;
     } finally {
       ws.close();
     }
   }
 
   async doStream(options: Parameters<LanguageModelV2['doStream']>[0]): Promise<Awaited<ReturnType<LanguageModelV2['doStream']>>> {
-    const { prompt, ...rest } = options;
+    const { prompt, responseFormat, ...rest } = options;
     
     // Convert messages to a single text prompt for Goose
-    const userMessage = this.convertPromptToText(prompt);
+    let userMessage = this.convertPromptToText(prompt);
+    
+    // Add JSON format instruction if needed
+    if (responseFormat?.type === 'json') {
+      userMessage += '\n\nPlease respond with valid JSON only.';
+      if (responseFormat.schema) {
+        userMessage += ` Follow this JSON schema: ${JSON.stringify(responseFormat.schema)}`;
+      }
+    }
     
     const ws = await this.createWebSocket();
     
     const stream = new ReadableStream<LanguageModelV2StreamPart>({
       start: async (controller) => {
         try {
+          let accumulatedText = '';
+          
           for await (const part of this.streamResponse(ws, userMessage)) {
+            // Accumulate text for JSON extraction
+            if (part.type === 'text-delta') {
+              accumulatedText += part.delta;
+            }
+            
+            // Handle JSON extraction on finish for JSON mode
+            if (part.type === 'finish' && responseFormat?.type === 'json' && accumulatedText) {
+              const extractedJson = this.extractJson(accumulatedText);
+              if (extractedJson !== accumulatedText) {
+                // Emit a new text sequence with just the JSON
+                const jsonId = generateId();
+                controller.enqueue({ type: 'text-start', id: jsonId });
+                controller.enqueue({ type: 'text-delta', id: jsonId, delta: extractedJson });
+                controller.enqueue({ type: 'text-end', id: jsonId });
+              }
+            }
+            
+            // Skip text parts in JSON mode since we'll emit clean JSON
+            if (responseFormat?.type === 'json' && (part.type === 'text-start' || part.type === 'text-delta' || part.type === 'text-end')) {
+              continue;
+            }
+            
             controller.enqueue(part);
           }
           controller.close();
@@ -257,6 +304,8 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
   private async* streamResponse(ws: WebSocket, message: string): AsyncGenerator<LanguageModelV2StreamPart> {
     let responseText = '';
     let finished = false;
+    let textPartId: string | null = null;
+    let hasStartedText = false;
     
     const messageQueue: LanguageModelV2StreamPart[] = [];
     let resolveNext: ((value: IteratorResult<LanguageModelV2StreamPart>) => void) | null = null;
@@ -268,29 +317,96 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
       }
     }, this.settings.responseTimeout);
 
+    const enqueueStreamPart = (part: LanguageModelV2StreamPart) => {
+      if (resolveNext) {
+        resolveNext({ done: false, value: part });
+        resolveNext = null;
+      } else {
+        messageQueue.push(part);
+      }
+    };
+
     ws.onmessage = (event) => {
       try {
         const data: GooseWebResponse = JSON.parse(event.data.toString());
         this.logger?.debug('Received WebSocket message', data);
         
-        let streamPart: LanguageModelV2StreamPart | null = null;
-        
         switch (data.type) {
           case 'response':
             if (data.content) {
               responseText += data.content;
-              streamPart = {
-                type: 'text-delta',
-                id: generateId(),
-                delta: data.content,
-              };
+              
+              // Start text part if this is the first content
+              if (!hasStartedText) {
+                textPartId = generateId();
+                hasStartedText = true;
+                enqueueStreamPart({
+                  type: 'text-start',
+                  id: textPartId,
+                });
+              }
+              
+              // Emit text delta
+              if (textPartId) {
+                enqueueStreamPart({
+                  type: 'text-delta',
+                  id: textPartId,
+                  delta: data.content,
+                });
+              }
+            }
+            break;
+          
+          case 'tool_request':
+            // End current text part if we were in the middle of one
+            if (hasStartedText && textPartId) {
+              enqueueStreamPart({
+                type: 'text-end',
+                id: textPartId,
+              });
+              hasStartedText = false;
+              textPartId = null;
+            }
+            
+            // Emit tool call
+            enqueueStreamPart({
+              type: 'tool-call',
+              toolCallId: data.id || generateId(),
+              toolName: data.tool_name || 'unknown',
+              input: JSON.stringify(data.arguments || {}),
+            });
+            break;
+          
+          case 'tool_response':
+            // Emit tool result if we have a matching tool call
+            if (data.result) {
+              const toolResult = Array.isArray(data.result) 
+                ? data.result.map(r => r.text || JSON.stringify(r)).join('\n')
+                : (typeof data.result === 'string' ? data.result : JSON.stringify(data.result));
+                
+              enqueueStreamPart({
+                type: 'tool-result',
+                toolCallId: data.id || generateId(),
+                toolName: data.tool_name || 'unknown',
+                result: toolResult,
+              });
             }
             break;
           
           case 'complete':
             clearTimeout(timeout);
             finished = true;
-            streamPart = {
+            
+            // End text part if we were in the middle of one
+            if (hasStartedText && textPartId) {
+              enqueueStreamPart({
+                type: 'text-end',
+                id: textPartId,
+              });
+            }
+            
+            // Emit finish
+            enqueueStreamPart({
               type: 'finish',
               finishReason: 'stop',
               usage: {
@@ -298,29 +414,29 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
                 outputTokens: 0,
                 totalTokens: 0,
               },
-            };
+            });
             break;
           
           case 'error':
             clearTimeout(timeout);
             finished = true;
-            streamPart = {
+            
+            // End text part if we were in the middle of one
+            if (hasStartedText && textPartId) {
+              enqueueStreamPart({
+                type: 'text-end',
+                id: textPartId,
+              });
+            }
+            
+            enqueueStreamPart({
               type: 'error',
               error: createAPICallError(
                 data.message || 'Unknown error from Goose server',
                 { wsUrl: this.settings.wsUrl, sessionId: this.sessionId, lastMessage: message }
               ),
-            };
+            });
             break;
-        }
-        
-        if (streamPart) {
-          if (resolveNext) {
-            resolveNext({ done: false, value: streamPart });
-            resolveNext = null;
-          } else {
-            messageQueue.push(streamPart);
-          }
         }
       } catch (error) {
         this.logger?.error('Failed to parse WebSocket message', error);
@@ -373,5 +489,27 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     }
     
     ws.close();
+  }
+
+  /**
+   * Extracts JSON from a text response that might contain other text.
+   * Looks for JSON objects or arrays and returns the first valid one found.
+   */
+  private extractJson(text: string): string {
+    // Try to find JSON in the text
+    const jsonMatch = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    if (jsonMatch) {
+      try {
+        // Validate that it's valid JSON
+        JSON.parse(jsonMatch[0]);
+        return jsonMatch[0];
+      } catch (e) {
+        // If not valid JSON, return the original text
+        return text;
+      }
+    }
+    
+    // If no JSON found, return original text
+    return text;
   }
 }
