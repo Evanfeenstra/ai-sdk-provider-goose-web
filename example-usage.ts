@@ -69,13 +69,13 @@ async function streamingWithToolsExample() {
     for await (const part of result.fullStream) {
       switch (part.type) {
         case "text-delta":
-          process.stdout.write(part.delta);
+          process.stdout.write(part.text);
           break;
         case "tool-call":
           console.log(`\n[TOOL CALL] ${part.toolName}: ${part.input}`);
           break;
         case "tool-result":
-          console.log(`[TOOL RESULT] ${part.result}`);
+          console.log(`[TOOL RESULT] ${part.output}`);
           break;
         case "finish":
           console.log(`\n[FINISHED] Reason: ${part.finishReason}`);
