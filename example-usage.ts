@@ -167,12 +167,6 @@ async function customSettingsExample() {
     sessionId: "custom-session",
     connectionTimeout: 15000,
     responseTimeout: 60000,
-    logger: {
-      debug: (msg, ...args) => console.log(`[DEBUG] ${msg}`, ...args),
-      info: (msg, ...args) => console.log(`[INFO] ${msg}`, ...args),
-      warn: (msg, ...args) => console.warn(`[WARN] ${msg}`, ...args),
-      error: (msg, ...args) => console.error(`[ERROR] ${msg}`, ...args),
-    },
   });
 
   try {
@@ -191,16 +185,15 @@ async function customSettingsExample() {
 async function main() {
   console.log("Goose Web AI SDK Provider Examples\n");
 
-  // await basicExample();
-  // console.log("\n" + "=".repeat(50) + "\n");
+  await basicExample();
+  console.log("\n" + "=".repeat(50) + "\n");
 
-  // await streamingExample();
-  // console.log("\n" + "=".repeat(50) + "\n");
+  await streamingExample();
+  console.log("\n" + "=".repeat(50) + "\n");
 
   await streamingWithToolsExample();
   console.log("\n" + "=".repeat(50) + "\n");
 
-  return;
   await objectGenerationExample();
   console.log("\n" + "=".repeat(50) + "\n");
 
