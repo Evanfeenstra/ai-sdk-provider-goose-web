@@ -60,7 +60,7 @@ async function streamingWithToolsExample() {
   try {
     const result = streamText({
       model,
-      prompt: "List the files in the current directory and tell me about them.",
+      prompt: "Read the streaming-notes.md file and summarize its contents.",
     });
 
     console.log("Streaming with tools:");
@@ -194,13 +194,13 @@ async function main() {
   // await basicExample();
   // console.log("\n" + "=".repeat(50) + "\n");
 
-  await streamingExample();
-  console.log("\n" + "=".repeat(50) + "\n");
+  // await streamingExample();
+  // console.log("\n" + "=".repeat(50) + "\n");
 
-  return;
   await streamingWithToolsExample();
   console.log("\n" + "=".repeat(50) + "\n");
 
+  return;
   await objectGenerationExample();
   console.log("\n" + "=".repeat(50) + "\n");
 

@@ -417,6 +417,9 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
               currentStreamingMessage = null;
             }
             
+            // Reset textStartEmitted so that content after tools can create new text parts
+            textStartEmitted = false;
+            
             // Emit tool call
             enqueueStreamPart({
               type: 'tool-call',
@@ -429,6 +432,7 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
           case 'tool_response':
             // Reset streaming message so next assistant response creates a new message (matches Goose web client)
             currentStreamingMessage = null;
+            textStartEmitted = false; // Allow new text parts after tool calls
             
             // Emit tool result if we have a matching tool call
             if (data.result) {
