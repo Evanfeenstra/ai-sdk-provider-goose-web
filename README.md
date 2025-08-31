@@ -1,6 +1,6 @@
 # AI SDK Provider for Goose Web
 
-An AI SDK v5 provider that connects to a Goose agent via WebSocket
+An AI SDK v5 provider that connects to a remote Goose agent via WebSocket. The actual LLM used by Goose is configured by the `goose web` command on the server, not by this provider.
 
 ## Features
 
@@ -18,6 +18,10 @@ npm install ai-sdk-provider-goose-web
 ```
 
 ## Usage Examples
+
+First start goose in the directory you want to work with:
+
+`goose web --port 8080`
 
 ### Basic Text Generation
 
