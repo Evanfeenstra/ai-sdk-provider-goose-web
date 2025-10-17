@@ -418,6 +418,7 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
       try {
         const data: GooseWebResponse = JSON.parse(event.data.toString());
         this.logger?.debug("Received WebSocket message", data);
+        console.log("[WS MESSAGE]", data.type, data.tool_name, data.result ? "HAS RESULT" : "");
 
         switch (data.type) {
           case "response":
@@ -618,56 +619,69 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     responseFormat?: { type: "json"; schema?: unknown } | { type: "text" }
   ): ReadableStream<LanguageModelV2StreamPart> {
     const self = this;
-    return new ReadableStream<LanguageModelV2StreamPart>({
-      async start(controller) {
-        try {
-          let accumulatedText = "";
+    let iteratorRunning = false;
 
-          for await (const part of generator) {
-            // Accumulate text for JSON extraction
-            if (part.type === "text-delta") {
-              accumulatedText += part.delta;
-            }
+    return new ReadableStream<LanguageModelV2StreamPart>(
+      {
+        async start(controller) {
+          // Start consuming the generator immediately in the background
+          // This ensures we process WebSocket messages as they arrive
+          if (!iteratorRunning) {
+            iteratorRunning = true;
+            (async () => {
+              try {
+                let accumulatedText = "";
 
-            // Handle JSON extraction on finish for JSON mode
-            if (
-              part.type === "finish" &&
-              responseFormat?.type === "json" &&
-              accumulatedText
-            ) {
-              const extractedJson = self.extractJson(accumulatedText);
-              if (extractedJson !== accumulatedText) {
-                // Emit a new text sequence with just the JSON
-                const jsonId = generateId();
-                controller.enqueue({ type: "text-start", id: jsonId });
-                controller.enqueue({
-                  type: "text-delta",
-                  id: jsonId,
-                  delta: extractedJson,
-                });
-                controller.enqueue({ type: "text-end", id: jsonId });
+                for await (const part of generator) {
+                  // Accumulate text for JSON extraction
+                  if (part.type === "text-delta") {
+                    accumulatedText += part.delta;
+                  }
+
+                  // Handle JSON extraction on finish for JSON mode
+                  if (
+                    part.type === "finish" &&
+                    responseFormat?.type === "json" &&
+                    accumulatedText
+                  ) {
+                    const extractedJson = self.extractJson(accumulatedText);
+                    if (extractedJson !== accumulatedText) {
+                      // Emit a new text sequence with just the JSON
+                      const jsonId = generateId();
+                      controller.enqueue({ type: "text-start", id: jsonId });
+                      controller.enqueue({
+                        type: "text-delta",
+                        id: jsonId,
+                        delta: extractedJson,
+                      });
+                      controller.enqueue({ type: "text-end", id: jsonId });
+                    }
+                  }
+
+                  // Skip text parts in JSON mode since we'll emit clean JSON
+                  if (
+                    responseFormat?.type === "json" &&
+                    (part.type === "text-start" ||
+                      part.type === "text-delta" ||
+                      part.type === "text-end")
+                  ) {
+                    continue;
+                  }
+
+                  controller.enqueue(part);
+                }
+
+                controller.close();
+              } catch (error) {
+                controller.error(error);
               }
-            }
-
-            // Skip text parts in JSON mode since we'll emit clean JSON
-            if (
-              responseFormat?.type === "json" &&
-              (part.type === "text-start" ||
-                part.type === "text-delta" ||
-                part.type === "text-end")
-            ) {
-              continue;
-            }
-
-            controller.enqueue(part);
+            })();
           }
-
-          controller.close();
-        } catch (error) {
-          controller.error(error);
-        }
+        },
       },
-    });
+      // Add a high water mark to minimize buffering - parts should flow through immediately
+      new CountQueuingStrategy({ highWaterMark: 1 })
+    );
   }
 
   /**

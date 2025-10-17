@@ -1,6 +1,6 @@
 {
   "name": "ai-sdk-provider-goose-web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AI SDK v5 provider for Goose via WebSocket connection",
   "keywords": [
     "ai-sdk",
@@ -52,6 +52,8 @@
   "dependencies": {
     "@ai-sdk/provider": "2.0.0",
     "@ai-sdk/provider-utils": "3.0.3",
+    "bufferutil": "^4.0.9",
+    "utf-8-validate": "^6.0.5",
     "ws": "^8.18.0"
   },
   "devDependencies": {
