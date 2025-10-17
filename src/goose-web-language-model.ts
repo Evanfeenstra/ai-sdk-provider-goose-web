@@ -418,7 +418,6 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
       try {
         const data: GooseWebResponse = JSON.parse(event.data.toString());
         this.logger?.debug("Received WebSocket message", data);
-        console.log("[WS MESSAGE]", data.type, data.tool_name, data.result ? "HAS RESULT" : "");
 
         switch (data.type) {
           case "response":

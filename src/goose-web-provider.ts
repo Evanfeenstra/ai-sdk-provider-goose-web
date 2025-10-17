@@ -95,7 +95,6 @@ export interface GooseWebProviderSettings extends GooseWebSettings {
 export function createGooseWeb(
   settings: GooseWebProviderSettings = {}
 ): GooseWebProvider {
-  console.log("CREATE GOOSE WEB ... 1");
   const createModel = (
     modelId: GooseWebModelId,
     modelSettings?: GooseWebSettings
