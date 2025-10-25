@@ -30,6 +30,12 @@ export interface GooseWebSettings {
    * Logger instance for debugging and monitoring.
    */
   logger?: Logger;
+
+  /**
+   * Callback function that is called when a session is created.
+   * Receives the session ID as a parameter.
+   */
+  sessionIdCallback?: (sessionId: string) => void;
 }
 
 /**
