@@ -84,7 +84,14 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
   }
 
   private async ensureSession(): Promise<void> {
+    this.logger?.debug("ensureSession called", {
+      sessionCreated: this.sessionCreated,
+      sessionId: this.sessionId,
+      providedSessionId: this.settings.sessionId
+    });
+
     if (this.sessionCreated && this.sessionId) {
+      this.logger?.debug("Session already exists, skipping creation");
       return;
     }
 
@@ -102,7 +109,10 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
       .replace(/^ws:\/\//, "http://")
       .replace(/\/ws$/, "");
 
-    this.logger?.debug("Creating session via REST API", { httpUrl });
+    this.logger?.debug("Creating session via REST API", {
+      wsUrl: this.settings.wsUrl,
+      httpUrl
+    });
 
     try {
       const response = await fetch(httpUrl, {
@@ -110,21 +120,48 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
         redirect: "manual", // Capture redirect without following
       });
 
+      this.logger?.debug("REST API response received", {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+
       // Extract session ID from Location: /session/{id}
       const location = response.headers.get("location");
+      this.logger?.debug("Location header", { location });
+
       if (location && location.startsWith("/session/")) {
         this.sessionId = location.replace("/session/", "");
         this.sessionCreated = true;
-        this.logger?.debug("Session created", { sessionId: this.sessionId });
+        this.logger?.debug("Session created successfully", { sessionId: this.sessionId });
+
+        // Call the callback if provided
+        if (this.settings.sessionIdCallback) {
+          this.settings.sessionIdCallback(this.sessionId);
+        }
       } else {
         // If no redirect, try to generate a session ID
         this.sessionId = this.generateSessionId();
         this.sessionCreated = true;
-        this.logger?.warn("No redirect received, generated session ID", { sessionId: this.sessionId });
+        this.logger?.warn("No redirect received, generated fallback session ID", {
+          sessionId: this.sessionId,
+          location,
+          responseStatus: response.status
+        });
+
+        // Call the callback if provided
+        if (this.settings.sessionIdCallback) {
+          this.settings.sessionIdCallback(this.sessionId);
+        }
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger?.error("Failed to create session via REST API", { httpUrl, error: errorMessage });
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger?.error("Failed to create session via REST API", {
+        httpUrl,
+        error: errorMessage,
+        stack: errorStack
+      });
       throw createConnectionError(
         `Failed to create session via REST API: ${errorMessage}`,
         {
@@ -582,6 +619,11 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
                 inputTokens: 0,
                 outputTokens: 0,
                 totalTokens: 0,
+              },
+              providerMetadata: {
+                "goose-web": {
+                  sessionId: this.sessionId,
+                },
               },
             });
             break;
