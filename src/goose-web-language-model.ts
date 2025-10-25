@@ -122,7 +122,15 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     }
   }
 
-  private async ensureSession(): Promise<void> {
+  /**
+   * Ensures a valid session exists, creating one if needed.
+   * Call this immediately after model creation to validate the session
+   * before sending any messages. This allows you to know if an old session
+   * was invalidated so you can decide whether to include full conversation history.
+   *
+   * @returns Object containing the sessionId and whether an old session was invalidated
+   */
+  public async ensureSession(): Promise<{ sessionId: string; oldSessionInvalidated: boolean }> {
     this.logger?.debug("ensureSession called", {
       sessionCreated: this.sessionCreated,
       sessionId: this.sessionId,
@@ -131,7 +139,7 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
 
     if (this.sessionCreated && this.sessionId) {
       this.logger?.debug("Session already exists, skipping creation");
-      return;
+      return { sessionId: this.sessionId, oldSessionInvalidated: false };
     }
 
     // Track if we're replacing an invalid session
@@ -147,7 +155,7 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
         this.logger?.debug("Using provided session ID", {
           sessionId: this.sessionId,
         });
-        return;
+        return { sessionId: this.sessionId, oldSessionInvalidated: false };
       } else {
         this.logger?.warn(
           "Provided session ID is invalid, creating new session",
@@ -194,13 +202,7 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
           sessionId: this.sessionId,
         });
 
-        // Call the callback if provided
-        if (this.settings.sessionIdCallback) {
-          this.settings.sessionIdCallback(
-            this.sessionId,
-            oldSessionInvalidated
-          );
-        }
+        return { sessionId: this.sessionId, oldSessionInvalidated };
       } else {
         // If no redirect, try to generate a session ID
         this.sessionId = this.generateSessionId();
@@ -214,13 +216,7 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
           }
         );
 
-        // Call the callback if provided
-        if (this.settings.sessionIdCallback) {
-          this.settings.sessionIdCallback(
-            this.sessionId,
-            oldSessionInvalidated
-          );
-        }
+        return { sessionId: this.sessionId, oldSessionInvalidated };
       }
     } catch (error) {
       const errorMessage =
@@ -874,4 +870,154 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     // If no JSON found, return original text
     return text;
   }
+}
+
+/**
+ * Standalone function to validate a Goose session.
+ * Call this before creating a model to check if a session exists and get a valid session ID.
+ *
+ * @param settings - Configuration including wsUrl and optional sessionId
+ * @returns Object containing the sessionId and whether an old session was invalidated
+ *
+ * @example
+ * ```typescript
+ * const { sessionId, oldSessionInvalidated } = await validateGooseSession({
+ *   wsUrl: "ws://localhost:8080/ws",
+ *   sessionId: "old_session_id", // optional
+ * });
+ *
+ * if (oldSessionInvalidated) {
+ *   // Send full conversation history
+ * }
+ *
+ * const model = gooseWeb("goose", { wsUrl, sessionId });
+ * ```
+ */
+export async function validateGooseSession(settings: {
+  wsUrl: string;
+  sessionId?: string;
+  logger?: Logger;
+}): Promise<{ sessionId: string; oldSessionInvalidated: boolean }> {
+  const { wsUrl, sessionId, logger } = settings;
+
+  // Helper to generate session ID
+  const generateSessionId = (): string => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hour = String(now.getHours()).padStart(2, "0");
+    const minute = String(now.getMinutes()).padStart(2, "0");
+    const second = String(now.getSeconds()).padStart(2, "0");
+    return `${year}${month}${day}_${hour}${minute}${second}`;
+  };
+
+  // Helper to validate session exists
+  const validateSessionExists = async (sessionIdToValidate: string): Promise<boolean> => {
+    const httpUrl = wsUrl
+      .replace(/^wss:\/\//, "https://")
+      .replace(/^ws:\/\//, "http://")
+      .replace(/\/ws$/, "");
+
+    try {
+      const response = await fetch(`${httpUrl}/api/sessions/${sessionIdToValidate}`, {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        logger?.debug("Session validation failed - HTTP error", {
+          sessionId: sessionIdToValidate,
+          status: response.status,
+        });
+        return false;
+      }
+
+      const data = await response.json();
+
+      logger?.debug("Session validation response", {
+        sessionId: sessionIdToValidate,
+        status: response.status,
+        hasError: !!data.error,
+      });
+
+      return !data.error;
+    } catch (error) {
+      logger?.error("Failed to validate session", {
+        sessionId: sessionIdToValidate,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  };
+
+  // Helper to create new session
+  const createNewSession = async (): Promise<string> => {
+    const httpUrl = wsUrl
+      .replace(/^wss:\/\//, "https://")
+      .replace(/^ws:\/\//, "http://")
+      .replace(/\/ws$/, "");
+
+    logger?.debug("Creating session via REST API", { wsUrl, httpUrl });
+
+    try {
+      const response = await fetch(httpUrl, {
+        method: "GET",
+        redirect: "manual",
+      });
+
+      logger?.debug("REST API response received", {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+      });
+
+      const location = response.headers.get("location");
+      logger?.debug("Location header", { location });
+
+      if (location && location.startsWith("/session/")) {
+        const newSessionId = location.replace("/session/", "");
+        logger?.debug("Session created successfully", { sessionId: newSessionId });
+        return newSessionId;
+      } else {
+        const newSessionId = generateSessionId();
+        logger?.warn("No redirect received, generated fallback session ID", {
+          sessionId: newSessionId,
+          location,
+          responseStatus: response.status,
+        });
+        return newSessionId;
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger?.error("Failed to create session via REST API", {
+        httpUrl,
+        error: errorMessage,
+      });
+      throw createConnectionError(
+        `Failed to create session via REST API: ${errorMessage}`,
+        { wsUrl: httpUrl }
+      );
+    }
+  };
+
+  // Main validation logic
+  let oldSessionInvalidated = false;
+
+  if (sessionId) {
+    const isValid = await validateSessionExists(sessionId);
+
+    if (isValid) {
+      logger?.debug("Using provided session ID", { sessionId });
+      return { sessionId, oldSessionInvalidated: false };
+    } else {
+      logger?.warn("Provided session ID is invalid, creating new session", {
+        oldSessionId: sessionId,
+      });
+      oldSessionInvalidated = true;
+    }
+  }
+
+  // Create new session
+  const newSessionId = await createNewSession();
+  return { sessionId: newSessionId, oldSessionInvalidated };
 }

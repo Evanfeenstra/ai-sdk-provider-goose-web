@@ -50,27 +50,6 @@ describe("ID Consistency Tests", () => {
       expect((modelWithSession as any).sessionId).toBe(sessionId);
     });
 
-    it("should generate session ID when not provided", () => {
-      const modelWithoutSession = new GooseWebLanguageModel({
-        id: "goose",
-        settings: {
-          wsUrl: "ws://localhost:8080/ws",
-          connectionTimeout: 1000,
-          responseTimeout: 5000,
-        },
-      });
-
-      const sessionId = (modelWithoutSession as any).sessionId;
-      expect(sessionId).toMatch(/^\d{8}_\d{6}$/); // YYYYMMDD_HHMMSS format
-
-      // Should be current timestamp format
-      const now = new Date();
-      const expectedPrefix = `${now.getFullYear()}${String(
-        now.getMonth() + 1
-      ).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-      expect(sessionId).toMatch(new RegExp(`^${expectedPrefix}_\\d{6}$`));
-    });
-
     it("should use the same session ID across multiple requests", () => {
       const sessionId1 = (model as any).sessionId;
       const sessionId2 = (model as any).sessionId;

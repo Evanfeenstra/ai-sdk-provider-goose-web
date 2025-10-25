@@ -27,6 +27,14 @@ export type {
 export { GooseWebLanguageModel } from "./goose-web-language-model.js";
 
 /**
+ * Standalone function to validate a Goose session.
+ * Call this before creating a model to check if a session exists and get a valid session ID.
+ *
+ * @see {@link validateGooseSession} for session validation without creating a model instance
+ */
+export { validateGooseSession } from "./goose-web-language-model.js";
+
+/**
  * Type definitions for Goose Web language models.
  * @see {@link GooseWebModelId} for supported model identifiers
  * @see {@link GooseWebLanguageModelOptions} for model configuration options

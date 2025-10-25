@@ -30,13 +30,6 @@ export interface GooseWebSettings {
    * Logger instance for debugging and monitoring.
    */
   logger?: Logger;
-
-  /**
-   * Callback function that is called when a session is created or updated.
-   * @param sessionId - The current session ID
-   * @param oldSessionInvalidated - True if the previous session was invalid and replaced with a new one
-   */
-  sessionIdCallback?: (sessionId: string, oldSessionInvalidated?: boolean) => void;
 }
 
 /**
