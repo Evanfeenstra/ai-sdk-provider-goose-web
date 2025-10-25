@@ -57,6 +57,7 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
 
   private logger?: Logger;
   private sessionId: string;
+  private sessionCreated: boolean;
 
   constructor(options: GooseWebLanguageModelOptions) {
     this.modelId = options.id;
@@ -67,7 +68,8 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
       ...options.settings,
     };
     this.logger = this.settings.logger;
-    this.sessionId = this.settings.sessionId || this.generateSessionId();
+    this.sessionId = this.settings.sessionId || "";
+    this.sessionCreated = false;
   }
 
   private generateSessionId(): string {
@@ -79,6 +81,57 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     const minute = String(now.getMinutes()).padStart(2, "0");
     const second = String(now.getSeconds()).padStart(2, "0");
     return `${year}${month}${day}_${hour}${minute}${second}`;
+  }
+
+  private async ensureSession(): Promise<void> {
+    if (this.sessionCreated && this.sessionId) {
+      return;
+    }
+
+    // If sessionId provided in settings, assume it exists
+    if (this.settings.sessionId) {
+      this.sessionId = this.settings.sessionId;
+      this.sessionCreated = true;
+      this.logger?.debug("Using provided session ID", { sessionId: this.sessionId });
+      return;
+    }
+
+    // Create session via REST API
+    const httpUrl = this.settings.wsUrl!
+      .replace(/^wss:\/\//, "https://")
+      .replace(/^ws:\/\//, "http://")
+      .replace(/\/ws$/, "");
+
+    this.logger?.debug("Creating session via REST API", { httpUrl });
+
+    try {
+      const response = await fetch(httpUrl, {
+        method: "GET",
+        redirect: "manual", // Capture redirect without following
+      });
+
+      // Extract session ID from Location: /session/{id}
+      const location = response.headers.get("location");
+      if (location && location.startsWith("/session/")) {
+        this.sessionId = location.replace("/session/", "");
+        this.sessionCreated = true;
+        this.logger?.debug("Session created", { sessionId: this.sessionId });
+      } else {
+        // If no redirect, try to generate a session ID
+        this.sessionId = this.generateSessionId();
+        this.sessionCreated = true;
+        this.logger?.warn("No redirect received, generated session ID", { sessionId: this.sessionId });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger?.error("Failed to create session via REST API", { httpUrl, error: errorMessage });
+      throw createConnectionError(
+        `Failed to create session via REST API: ${errorMessage}`,
+        {
+          wsUrl: httpUrl,
+        }
+      );
+    }
   }
 
   private createWebSocket(): Promise<WebSocket> {
@@ -118,6 +171,9 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
   async doGenerate(options: Parameters<LanguageModelV2["doGenerate"]>[0]) {
     const { prompt, responseFormat, ...rest } = options;
 
+    // Ensure session exists before creating WebSocket
+    await this.ensureSession();
+
     // Convert messages to a single text prompt for Goose
     let userMessage = this.convertPromptToText(prompt);
 
@@ -155,6 +211,9 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     options: Parameters<LanguageModelV2["doStream"]>[0]
   ): Promise<Awaited<ReturnType<LanguageModelV2["doStream"]>>> {
     const { prompt, responseFormat, ...rest } = options;
+
+    // Ensure session exists before creating WebSocket
+    await this.ensureSession();
 
     // Convert messages to a single text prompt for Goose
     let userMessage = this.convertPromptToText(prompt);
