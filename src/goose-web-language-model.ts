@@ -89,9 +89,15 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
       .replace(/^ws:\/\//, "http://")
       .replace(/\/ws$/, "");
 
+    const headers: Record<string, string> = {};
+    if (this.settings.authToken) {
+      headers["Authorization"] = `Bearer ${this.settings.authToken}`;
+    }
+
     try {
       const response = await fetch(`${httpUrl}/api/sessions/${sessionId}`, {
         method: "GET",
+        headers,
       });
 
       if (!response.ok) {
@@ -179,10 +185,16 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
       httpUrl,
     });
 
+    const headers: Record<string, string> = {};
+    if (this.settings.authToken) {
+      headers["Authorization"] = `Bearer ${this.settings.authToken}`;
+    }
+
     try {
       const response = await fetch(httpUrl, {
         method: "GET",
         redirect: "manual", // Capture redirect without following
+        headers,
       });
 
       this.logger?.debug("REST API response received", {
@@ -238,7 +250,14 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
 
   private createWebSocket(): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(this.settings.wsUrl!);
+      const wsOptions: any = {};
+      if (this.settings.authToken) {
+        wsOptions.headers = {
+          Authorization: `Bearer ${this.settings.authToken}`,
+        };
+      }
+
+      const ws = new WebSocket(this.settings.wsUrl!, wsOptions);
       const timeout = setTimeout(() => {
         ws.close();
         reject(
@@ -884,21 +903,23 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
  * const { sessionId, oldSessionInvalidated } = await validateGooseSession({
  *   wsUrl: "ws://localhost:8080/ws",
  *   sessionId: "old_session_id", // optional
+ *   authToken: "your-auth-token", // optional
  * });
  *
  * if (oldSessionInvalidated) {
  *   // Send full conversation history
  * }
  *
- * const model = gooseWeb("goose", { wsUrl, sessionId });
+ * const model = gooseWeb("goose", { wsUrl, sessionId, authToken });
  * ```
  */
 export async function validateGooseSession(settings: {
   wsUrl: string;
   sessionId?: string;
+  authToken?: string;
   logger?: Logger;
 }): Promise<{ sessionId: string; oldSessionInvalidated: boolean }> {
-  const { wsUrl, sessionId, logger } = settings;
+  const { wsUrl, sessionId, authToken, logger } = settings;
 
   // Helper to generate session ID
   const generateSessionId = (): string => {
@@ -919,9 +940,15 @@ export async function validateGooseSession(settings: {
       .replace(/^ws:\/\//, "http://")
       .replace(/\/ws$/, "");
 
+    const headers: Record<string, string> = {};
+    if (authToken) {
+      headers["Authorization"] = `Bearer ${authToken}`;
+    }
+
     try {
       const response = await fetch(`${httpUrl}/api/sessions/${sessionIdToValidate}`, {
         method: "GET",
+        headers,
       });
 
       if (!response.ok) {
@@ -959,10 +986,16 @@ export async function validateGooseSession(settings: {
 
     logger?.debug("Creating session via REST API", { wsUrl, httpUrl });
 
+    const headers: Record<string, string> = {};
+    if (authToken) {
+      headers["Authorization"] = `Bearer ${authToken}`;
+    }
+
     try {
       const response = await fetch(httpUrl, {
         method: "GET",
         redirect: "manual",
+        headers,
       });
 
       logger?.debug("REST API response received", {

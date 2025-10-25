@@ -15,6 +15,12 @@ export interface GooseWebSettings {
   sessionId?: string;
 
   /**
+   * Authentication token for the Goose server.
+   * Will be sent as Bearer token in the Authorization header.
+   */
+  authToken?: string;
+
+  /**
    * Connection timeout in milliseconds.
    * @default 30000
    */
