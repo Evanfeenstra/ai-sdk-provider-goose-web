@@ -60,12 +60,13 @@ describe("ID Consistency Tests", () => {
   });
 
   describe("ID Generation Utility", () => {
-    it("should call generateId when creating response IDs", () => {
+    it("should call generateId when creating response IDs", async () => {
       // Test that our mock would be called
       expect(mockGenerateId).toHaveBeenCalledTimes(0); // No calls yet since we haven't triggered any generation
 
-      // Call the private generateSessionId method to verify it creates proper format
-      const generatedSessionId = (model as any).generateSessionId();
+      // Import and call generateSessionId to verify it creates proper format
+      const { generateSessionId } = await import("./goose-web-language-model.js");
+      const generatedSessionId = generateSessionId();
       expect(generatedSessionId).toMatch(/^\d{8}_\d{6}$/);
     });
   });

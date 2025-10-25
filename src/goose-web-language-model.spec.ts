@@ -143,8 +143,9 @@ describe("GooseWebLanguageModel", () => {
   });
 
   describe("generateSessionId", () => {
-    it("should generate session ID in correct format", () => {
-      const sessionId = (model as any).generateSessionId();
+    it("should generate session ID in correct format", async () => {
+      const { generateSessionId } = await import("./goose-web-language-model.js");
+      const sessionId = generateSessionId();
 
       // Should match format: YYYYMMDD_HHMMSS
       expect(sessionId).toMatch(/^\d{8}_\d{6}$/);
