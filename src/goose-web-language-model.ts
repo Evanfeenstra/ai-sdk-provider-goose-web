@@ -197,7 +197,8 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     };
     this.logger = this.settings.logger;
     this.sessionId = this.settings.sessionId || "";
-    this.sessionCreated = false;
+    // If assumeSessionValid is true and sessionId is provided, skip validation
+    this.sessionCreated = !!(this.settings.assumeSessionValid && this.settings.sessionId);
   }
 
   private async validateSessionExists(sessionId: string): Promise<boolean> {
@@ -214,6 +215,9 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
    * Call this immediately after model creation to validate the session
    * before sending any messages. This allows you to know if an old session
    * was invalidated so you can decide whether to include full conversation history.
+   *
+   * Note: If you've already validated the session using validateGooseSession(),
+   * you can pass assumeSessionValid: true to the model settings to skip re-validation.
    *
    * @returns Object containing the sessionId and whether an old session was invalidated
    */
@@ -928,7 +932,13 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
  *   // Send full conversation history
  * }
  *
- * const model = gooseWeb("goose", { wsUrl, sessionId, authToken });
+ * // Pass assumeSessionValid: true to skip re-validation in the model
+ * const model = gooseWeb("goose", {
+ *   wsUrl,
+ *   sessionId,
+ *   authToken,
+ *   assumeSessionValid: true  // Skip validation since we just validated it
+ * });
  * ```
  */
 export async function validateGooseSession(settings: {
