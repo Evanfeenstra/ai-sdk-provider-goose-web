@@ -142,24 +142,6 @@ describe("GooseWebLanguageModel", () => {
     });
   });
 
-  describe("generateSessionId", () => {
-    it("should generate session ID in correct format", async () => {
-      const { generateSessionId } = await import("./goose-web-language-model.js");
-      const sessionId = generateSessionId();
-
-      // Should match format: YYYYMMDD_HHMMSS
-      expect(sessionId).toMatch(/^\d{8}_\d{6}$/);
-
-      // Should be a valid timestamp format
-      const [datePart, timePart] = sessionId.split("_");
-      expect(datePart).toHaveLength(8);
-      expect(timePart).toHaveLength(6);
-
-      // Date part should be reasonable (starting with 20 for 2000s)
-      expect(datePart.startsWith("20")).toBe(true);
-    });
-  });
-
   describe("extractJson", () => {
     it("should extract valid JSON object", () => {
       const text =

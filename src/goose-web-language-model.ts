@@ -42,21 +42,6 @@ export interface GooseWebLanguageModelOptions {
 export type GooseWebModelId = "goose" | (string & {});
 
 /**
- * Helper function to generate a session ID.
- * @internal
- */
-export function generateSessionId(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
-  const second = String(now.getSeconds()).padStart(2, "0");
-  return `${year}${month}${day}_${hour}${minute}${second}`;
-}
-
-/**
  * Helper function to validate if a session exists.
  */
 async function validateSessionExistsHelper(
@@ -145,16 +130,19 @@ async function createNewSessionHelper(
 
     if (location && location.startsWith("/session/")) {
       const newSessionId = location.replace("/session/", "");
-      logger?.debug("Session created successfully", { sessionId: newSessionId });
+      logger?.debug("Session created successfully", {
+        sessionId: newSessionId,
+      });
       return newSessionId;
     } else {
-      const newSessionId = generateSessionId();
-      logger?.warn("No redirect received, generated fallback session ID", {
-        sessionId: newSessionId,
+      logger?.error("No redirect received from REST API", {
         location,
         responseStatus: response.status,
       });
-      return newSessionId;
+      throw createConnectionError(
+        "Failed to create session: No redirect received from REST API",
+        { wsUrl: httpUrl, responseStatus: response.status }
+      );
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -198,7 +186,9 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
     this.logger = this.settings.logger;
     this.sessionId = this.settings.sessionId || "";
     // If assumeSessionValid is true and sessionId is provided, skip validation
-    this.sessionCreated = !!(this.settings.assumeSessionValid && this.settings.sessionId);
+    this.sessionCreated = !!(
+      this.settings.assumeSessionValid && this.settings.sessionId
+    );
   }
 
   private async validateSessionExists(sessionId: string): Promise<boolean> {
@@ -221,7 +211,10 @@ export class GooseWebLanguageModel implements LanguageModelV2 {
    *
    * @returns Object containing the sessionId and whether an old session was invalidated
    */
-  public async ensureSession(): Promise<{ sessionId: string; oldSessionInvalidated: boolean }> {
+  public async ensureSession(): Promise<{
+    sessionId: string;
+    oldSessionInvalidated: boolean;
+  }> {
     this.logger?.debug("ensureSession called", {
       sessionCreated: this.sessionCreated,
       sessionId: this.sessionId,
@@ -953,7 +946,12 @@ export async function validateGooseSession(settings: {
   let oldSessionInvalidated = false;
 
   if (sessionId) {
-    const isValid = await validateSessionExistsHelper(wsUrl, sessionId, authToken, logger);
+    const isValid = await validateSessionExistsHelper(
+      wsUrl,
+      sessionId,
+      authToken,
+      logger
+    );
 
     if (isValid) {
       logger?.debug("Using provided session ID", { sessionId });
