@@ -59,17 +59,6 @@ describe("ID Consistency Tests", () => {
     });
   });
 
-  describe("ID Generation Utility", () => {
-    it("should call generateId when creating response IDs", () => {
-      // Test that our mock would be called
-      expect(mockGenerateId).toHaveBeenCalledTimes(0); // No calls yet since we haven't triggered any generation
-
-      // Call the private generateSessionId method to verify it creates proper format
-      const generatedSessionId = (model as any).generateSessionId();
-      expect(generatedSessionId).toMatch(/^\d{8}_\d{6}$/);
-    });
-  });
-
   describe("Text ID Consistency Logic", () => {
     it("should demonstrate text part ID consistency requirements", () => {
       // This test documents the expected behavior for text streaming IDs

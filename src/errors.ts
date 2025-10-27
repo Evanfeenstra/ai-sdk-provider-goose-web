@@ -8,6 +8,7 @@ export interface GooseWebErrorMetadata {
   sessionId?: string;
   lastMessage?: string;
   connectionState?: "connecting" | "connected" | "disconnected" | "error";
+  responseStatus?: number;
 }
 
 /**

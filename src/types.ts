@@ -15,6 +15,20 @@ export interface GooseWebSettings {
   sessionId?: string;
 
   /**
+   * Authentication token for the Goose server.
+   * Will be sent as Bearer token in the Authorization header.
+   */
+  authToken?: string;
+
+  /**
+   * Skip session validation if sessionId is provided.
+   * Set to true if you've already validated the session externally
+   * (e.g., using validateGooseSession function).
+   * @default false
+   */
+  assumeSessionValid?: boolean;
+
+  /**
    * Connection timeout in milliseconds.
    * @default 30000
    */
